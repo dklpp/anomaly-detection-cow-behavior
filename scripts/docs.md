@@ -7,3 +7,6 @@ The `pruning.py` script implements a two-stage video filtering system that proce
 
 ## roi_calculator.py
 The `roi_calculator.py` script provides an interactive tool for defining the Region of Interest (ROI) in video analysis. When executed, it opens the first frame of a specified video file and allows users to visually select a rectangular area by clicking and dragging the mouse. After selection, it outputs the coordinates (x, y) and dimensions (width, height) of the ROI, which can then be used as configuration parameters in the main pruning script.
+
+## process_video.py
+The `process_video.py` scipt reads the data mp4 file (for testing you can specify argparse to read only N first seconds), then it prunes each frame and saves to the output folder.
