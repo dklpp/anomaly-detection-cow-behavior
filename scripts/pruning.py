@@ -9,8 +9,8 @@ import time
 from datetime import timedelta
 import os 
 
-VIDEO_PATH = "cow_trimmed.mp4" 
-OUTPUT_VIDEO_PATH = "cow_pruned_segments.mp4"
+VIDEO_PATH = "anomaly-detection-cow-behavior/data/cow_full.mp4" 
+OUTPUT_VIDEO_PATH = "cow_pruned_segments_full.mp4"
 
 # PIXEL THRESHOLD: Foreground pixels needed to register significant motion
 MOTION_PIXEL_THRESHOLD = 5000 
@@ -19,10 +19,10 @@ MOTION_PIXEL_THRESHOLD = 5000
 CONFIRMATION_FRAMES = 30 
 
 # INACTIVITY TIME: How long (in frames) the motion must be absent to confirm the cow has left the critical zone.
-INACTIVITY_FRAMES_TO_END_CLIP = 60
+INACTIVITY_FRAMES_TO_END_CLIP = 30
 
 # WINDOW PADDING: How many seconds of video to include *before* the motion starts.
-PRE_MOTION_PADDING_SECONDS = 5
+PRE_MOTION_PADDING_SECONDS = 2
 PADDING_FRAMES = 0 
 
 # Region of Interest (ROI) 
@@ -84,13 +84,30 @@ def run_stage_1_analysis():
         # Note: The 'roi' variable is only used for motion detection, not for output.
         roi = frame[ROI_Y:ROI_Y + ROI_H, ROI_X:ROI_X + ROI_W]
         fgMask = backSub.apply(roi)
+
+        # Filter out non-colored (grayscale) pixels from the motion mask ---
+        # A pixel is considered non-colored if the standard deviation of its B,G,R channels is low.
+        # We calculate the standard deviation across the color channels for each pixel in the ROI.
+        std_dev_channels = np.std(roi, axis=2)
         
+        # Create a mask where pixels are considered 'colored' if their channel std dev is above a threshold.
+        # This threshold can be tuned. A lower value is more sensitive to color.
+        COLOR_SENSITIVITY_THRESHOLD = 10 
+        color_mask = (std_dev_channels > COLOR_SENSITIVITY_THRESHOLD).astype(np.uint8) * 255
+
+        # The fgMask from the background subtractor contains shadows (value 127). We only want definite foreground (value 255).
+        foreground_only_mask = (fgMask == 255).astype(np.uint8) * 255
+        
+        # Combine the two masks: we want pixels that are BOTH foreground AND colored.
+        colored_foreground_mask = cv2.bitwise_and(foreground_only_mask, color_mask)
+
         # Clean up mask 
         kernel = np.ones((5, 5), np.uint8)
-        fgMask = cv2.morphologyEx(fgMask, cv2.MORPH_CLOSE, kernel)
+        # The morphology is now applied to the new, filtered mask.
+        cleaned_mask = cv2.morphologyEx(colored_foreground_mask, cv2.MORPH_CLOSE, kernel)
         
-        # Calculate motion area only within the ROI
-        motion_area = np.sum(fgMask == 255)
+        # Calculate motion area from the cleaned, color-filtered mask
+        motion_area = np.sum(cleaned_mask == 255)
 
         # --- Motion Detection Logic ---
 
