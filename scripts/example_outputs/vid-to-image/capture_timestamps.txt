@@ -1,0 +1,3 @@
+Capture triggered at video time: 0:00:27.200000 (Frame: 680)
+Capture triggered at video time: 0:10:39.200000 (Frame: 15980)
+Capture triggered at video time: 0:21:56.400000 (Frame: 32910)
