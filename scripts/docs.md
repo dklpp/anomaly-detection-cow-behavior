@@ -10,3 +10,24 @@ The `roi_calculator.py` script provides an interactive tool for defining the Reg
 
 ## process_video.py
 The `process_video.py` script reads the data mp4 file (for testing you can specify argparse to read only N first seconds), then it prunes each frame and saves to the output folder.
+
+## count_cows.py
+The `count_cows.py` script analyzes a video to detect cow arrivals and departures within a specified Region of Interest (ROI). It operates by counting pixels that meet certain color criteria ('color' mode using HSV thresholds or 'green' mode for bright green pixels). The script applies a moving average to the pixel count signal to smooth out noise and then uses configurable thresholds to identify 'arrive' and 'depart' events. Finally, it prints a timeline of these events.
+
+## leg_grouping.py
+The `leg_grouping.py` script is a pipeline for identifying and categorizing cow legs from a video. It first extracts potential leg images from video frames based on contour properties (size, aspect ratio). Then, it extracts features from these images and uses K-Means clustering to group similar leg images together. The resulting grouped images are saved into separate directories for further analysis.
+
+## plot_color_activity.py
+The `plot_color_activity.py` script generates a plot of pixel activity over time for a given video file and ROI. It can track either colored pixels (using HSV thresholds) or bright green pixels. The script calculates the number of target pixels in each frame, applies a moving average to smooth the data, and then generates and saves a plot showing both the raw and smoothed activity curves over time.
+
+## pruning_hsv.py
+The `pruning_hsv.py` script is an enhanced version of `pruning.py`. It filters a video to find segments with significant motion, but with an added condition: it only considers motion of pixels that fall within a specific HSV color range, targeting thermal camera colors. It uses background subtraction to detect motion and then filters those motion events with the color mask. The script then exports the relevant, color-filtered motion segments into a new, shorter video file.
+
+## pixel/pixel_counter.py
+The `pixel/pixel_counter.py` script is a utility for analyzing a single image. It counts the number of pixels that fall within a predefined HSV color range (designed to identify thermal colors like greens and blues). As output, it prints the total count and saves a new image where the counted pixels are highlighted in red for visual verification.
+
+## pixel/video_pixel_counter.py
+The `pixel/video_pixel_counter.py` script analyzes a full video to provide statistics on colored pixel counts per frame. It processes the video frame by frame, counts the pixels within the target HSV color range in each frame, and then calculates and displays aggregate statistics for the entire video, including the maximum, minimum, average, median, and standard deviation of the pixel counts.
+
+## vid-to-image/process_thermal_video.py
+The `vid-to-image/process_thermal_video.py` script is designed to detect and capture key moments in a thermal video. It monitors the video for frames where the number of "thermal" pixels exceeds a set threshold. When triggered, it records a 10-second sequence of frames. From this sequence, it generates two summary images: a "fusion" image (the average of all frames) and a collage. The script logs the trigger time and implements a cooldown period to prevent capturing redundant events.
