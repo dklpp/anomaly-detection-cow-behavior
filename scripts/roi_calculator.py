@@ -42,4 +42,4 @@ def get_roi_interactively(video_path):
         print("ROI selection cancelled or failed.")
         return None
 
-get_roi_interactively("cow_trimmed.mp4")
+get_roi_interactively("./anomaly-detection-cow-behavior/data/cow_trimmed.mp4")
