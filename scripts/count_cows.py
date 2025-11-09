@@ -133,7 +133,8 @@ def save_event_frames(
         print(f"[INFO] Saving event {event_i}: frames {start_f} → {end_f}")
 
         cap.set(cv2.CAP_PROP_POS_FRAMES, start_f)
-        frame_count = 0
+        frame_count = 0  # number of frames processed within this event
+        saved_count = 0  # number of frames actually written
 
         while True:
             cur_frame = int(cap.get(cv2.CAP_PROP_POS_FRAMES))
@@ -151,8 +152,11 @@ def save_event_frames(
             if frame.size == 0:
                 continue
 
-            output_path = os.path.join(cow_dir, f"frame_{frame_count:05d}.jpg")
-            cv2.imwrite(output_path, frame)
+            if frame_count % 5 == 0:
+                output_path = os.path.join(cow_dir, f"frame_{saved_count:05d}.jpg")
+                cv2.imwrite(output_path, frame)
+                saved_count += 1
+
             frame_count += 1
 
     cap.release()
@@ -168,7 +172,7 @@ def main() -> None:
         "--roi",
         type=str,
         #default="248,260,420,344",
-        default="253,256,418,343",
+        default="full",
         help="ROI as x,y,w,h. Use 'full' to analyze entire frame.",
     )
     parser.add_argument(
