@@ -1,4 +1,5 @@
 import argparse
+import os
 from dataclasses import dataclass
 from typing import List, Optional, Tuple
 
@@ -95,15 +96,79 @@ def detect_events(
     return arrivals, departures
 
 
+def save_event_frames(
+    video_path: str,
+    roi: Optional[ROI],
+    arrivals: List[Tuple[str, int, float]],
+    departures: List[Tuple[str, int, float]],
+    output_root: str = "output",
+) -> None:
+    os.makedirs(output_root, exist_ok=True)
+
+    video_name = os.path.splitext(os.path.basename(video_path))[0]
+    output_dir = os.path.join(output_root, video_name)
+    os.makedirs(output_dir, exist_ok=True)
+
+    # Pair arrival→departure events
+    pairs = []
+    for a, d in zip(arrivals, departures):
+        _, a_idx, _ = a
+        _, d_idx, _ = d
+        if d_idx > a_idx:
+            pairs.append((a_idx, d_idx))
+
+    if not pairs:
+        print("[INFO] No arrival/departure pairs detected — nothing to extract.")
+        return
+
+    cap = cv2.VideoCapture(video_path)
+    if not cap.isOpened():
+        print("[ERROR] Failed to reopen video for extraction.")
+        return
+
+    for event_i, (start_f, end_f) in enumerate(pairs, start=1):
+        cow_dir = os.path.join(output_dir, f"cow_{event_i:02d}")
+        os.makedirs(cow_dir, exist_ok=True)
+
+        print(f"[INFO] Saving event {event_i}: frames {start_f} → {end_f}")
+
+        cap.set(cv2.CAP_PROP_POS_FRAMES, start_f)
+        frame_count = 0
+
+        while True:
+            cur_frame = int(cap.get(cv2.CAP_PROP_POS_FRAMES))
+            if cur_frame > end_f:
+                break
+
+            ret, frame = cap.read()
+            if not ret:
+                break
+
+            if roi:
+                sy, sx = roi.slice
+                frame = frame[sy, sx]
+
+            if frame.size == 0:
+                continue
+
+            output_path = os.path.join(cow_dir, f"frame_{frame_count:05d}.jpg")
+            cv2.imwrite(output_path, frame)
+            frame_count += 1
+
+    cap.release()
+    print(f"[DONE] Frames saved inside: {output_dir}")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Count cow arrivals/departures using fixed pixel count thresholds within an ROI."
+        description="Count cow arrivals/departures and export cropped frames between events."
     )
-    parser.add_argument("--video", default="data/cow_trimmed.mp4", help="Path to the input MP4 video.")
+    parser.add_argument("--video", default="data/cow_hsv_pruned_1h.mp4", help="Path to the input MP4 video.")
     parser.add_argument(
         "--roi",
         type=str,
-        default="248,260,420,344",
+        #default="248,260,420,344",
+        default="253,256,418,343",
         help="ROI as x,y,w,h. Use 'full' to analyze entire frame.",
     )
     parser.add_argument(
@@ -112,47 +177,13 @@ def main() -> None:
         default="color",
         help="Detection mode: 'color' counts saturated colored pixels, 'green' counts bright green pixels.",
     )
-    parser.add_argument(
-        "--bright-threshold",
-        type=int,
-        default=100,
-        help="Green-channel value (0-255) to consider a pixel part of a cow (green mode).",
-    )
-    parser.add_argument(
-        "--color-sat-threshold",
-        type=int,
-        default=28,
-        help="HSV saturation threshold (0-255) for classifying a pixel as colored (color mode).",
-    )
-    parser.add_argument(
-        "--color-value-threshold",
-        type=int,
-        default=40,
-        help="HSV value (brightness) threshold (0-255) to ignore dim pixels in color mode.",
-    )
-    parser.add_argument(
-        "--smooth-window",
-        type=int,
-        default=9,
-        help="Size of moving-average window (frames) applied to the activity curve.",
-    )
-    parser.add_argument(
-        "--arrive-threshold",
-        type=float,
-        default=20000.0,
-        help="Pixel count that triggers an arrival when crossed upwards.",
-    )
-    parser.add_argument(
-        "--depart-threshold",
-        type=float,
-        default=10000.0,
-        help="Pixel count that triggers a departure when crossed downwards.",
-    )
-    parser.add_argument(
-        "--dump-signal",
-        action="store_true",
-        help="Print basic statistics about the pixel-count signal.",
-    )
+    parser.add_argument("--bright-threshold", type=int, default=100)
+    parser.add_argument("--color-sat-threshold", type=int, default=28)
+    parser.add_argument("--color-value-threshold", type=int, default=40)
+    parser.add_argument("--smooth-window", type=int, default=9)
+    parser.add_argument("--arrive-threshold", type=float, default=20000.0)
+    parser.add_argument("--depart-threshold", type=float, default=10000.0)
+    parser.add_argument("--dump-signal", action="store_true")
     args = parser.parse_args()
 
     if args.roi.lower() == "full":
@@ -182,9 +213,8 @@ def main() -> None:
     smoothed_signal = moving_average(raw_signal, args.smooth_window)
 
     if args.dump_signal:
-        print(f"Frames processed: {smoothed_signal.size}")
-        print(f"Signal min/max/mean: {smoothed_signal.min():.0f} / {smoothed_signal.max():.0f} / {smoothed_signal.mean():.0f}")
-        print(f"First 10 smoothed counts: {[int(v) for v in smoothed_signal[:10]]}")
+        print(f"Frames: {smoothed_signal.size}")
+        print(f"Min/Max/Mean: {smoothed_signal.min():.0f} / {smoothed_signal.max():.0f} / {smoothed_signal.mean():.0f}")
 
     arrivals, departures = detect_events(
         smoothed_signal,
@@ -194,29 +224,17 @@ def main() -> None:
     )
 
     print("\n=== Cow Traffic Report ===")
-    print(f"Video: {args.video}")
-    if roi:
-        print(f"ROI: x={roi.x}, y={roi.y}, w={roi.w}, h={roi.h}")
-    else:
-        print("ROI: full frame")
-    print(f"Detection mode: {args.mode}")
-    if args.mode == "green":
-        print(f"Bright threshold: {args.bright_threshold}")
-    else:
-        print(f"Color saturation threshold: {args.color_sat_threshold}")
-        print(f"Color value threshold: {args.color_value_threshold}")
-    print(f"Smoothing window: {args.smooth_window}")
-    print(f"Arrival threshold: {args.arrive_threshold:.0f}")
-    print(f"Departure threshold: {args.depart_threshold:.0f}")
-    print(f"Arrivals detected: {len(arrivals)}")
-    print(f"Departures detected: {len(departures)}")
+    print(f"Arrivals:   {len(arrivals)}")
+    print(f"Departures: {len(departures)}")
 
-    if arrivals or departures:
-        print("\nTimeline:")
-        for label, frame_idx, seconds in sorted(arrivals + departures, key=lambda e: e[1]):
-            print(f" - {label:7s} @ frame {frame_idx:5d} ({seconds:6.2f}s)")
-    else:
-        print("\nTimeline: no events detected")
+    # ✅ Extract training frames
+    save_event_frames(
+        video_path=args.video,
+        roi=roi,
+        arrivals=arrivals,
+        departures=departures,
+        output_root="output",
+    )
 
 
 if __name__ == "__main__":

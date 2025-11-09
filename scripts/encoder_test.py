@@ -23,14 +23,14 @@ def get_reconstruction_error(img_path, model):
 model = tf.keras.models.load_model("models/leg_autoencoder.h5")
 
 # 1. Find a good threshold by checking errors on images
-normal_image_path = "output/grouped_legs/group_0/leg_1106_471_151.png"
+normal_image_path = "./output/cow_trimmed/cow_01/frame_00020.jpg"
 normal_error = get_reconstruction_error(normal_image_path, model)
 print(f"Normal image error: {normal_error}") 
 
 ANOMALY_THRESHOLD = 0.01 # Need to change when validated
 
 # 2. Test an anomalous image
-anomalous_image_path = "output/grouped_legs/group_0/leg_1126_469_133.png"
+anomalous_image_path = "./output/cow_trimmed/cow_01/frame_00025.jpg"
 anomaly_error = get_reconstruction_error(anomalous_image_path, model)
 print(f"Anomalous image error: {anomaly_error}")
 
