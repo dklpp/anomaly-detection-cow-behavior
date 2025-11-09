@@ -31,3 +31,9 @@ The `pixel/video_pixel_counter.py` script analyzes a full video to provide stati
 
 ## vid-to-image/process_thermal_video.py
 The `vid-to-image/process_thermal_video.py` script is designed to detect and capture key moments in a thermal video. It monitors the video for frames where the number of "thermal" pixels exceeds a set threshold. When triggered, it records a 10-second sequence of frames. From this sequence, it generates two summary images: a "fusion" image (the average of all frames) and a collage. The script logs the trigger time and implements a cooldown period to prevent capturing redundant events.
+
+## temperature_anomaly_detection.py
+The `temperature_anomaly_detection.py` script analyzes collages of thermal video frames to find temperature-based anomalies. It works by splitting each collage into individual frames and calculating the average and maximum "temperature" (using the V-channel from the HSV colorspace) for the entire collage (global) and for each frame (local). A frame is flagged as an anomaly if its local temperature metrics significantly deviate from the global ones. The script then generates a new collage of all flagged frames, annotated with their timestamps and metrics.
+
+## kmeans_anomaly_detection.py
+The `kmeans_anomaly_detection.py` script uses clustering to find visually anomalous frames in the video collages. It extracts a feature vector from every frame across all collages using the original, full-color pixel data. It then trains a KMeans model on this dataset to group visually similar frames. Frames that are far from their assigned cluster's center (specifically, those in the top percentile of distances) are flagged as anomalies. The script outputs a collage of these anomalous frames, annotated with their timestamps and distance scores.
