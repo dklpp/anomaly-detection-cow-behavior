@@ -5,6 +5,7 @@ import re
 from pathlib import Path
 import math
 from sklearn.cluster import KMeans
+from sklearn.metrics import precision_recall_fscore_support
 from tqdm import tqdm
 import datetime
 
@@ -16,9 +17,12 @@ ANOMALY_COLLAGE_PATH = OUTPUT_DIR / "kmeans_anomaly_collage.png"
 
 N_CLUSTERS = 8
 IMG_RESIZE_DIM = (1024, 1024)
+FRAME_RESIZE_DIM = (256, 256)
 
 # Anomaly is defined as being in the top X percentile of distances to cluster center
 ANOMALY_PERCENTILE_THRESHOLD = 97
+
+ANOMALIES_FILE = Path("kmeans/anomalies.txt")
 
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -29,7 +33,7 @@ def get_timestamp_for_frame(trigger_frame_num):
     
     with open(TIMESTAMPS_FILE, 'r') as f:
         for line in f:
-            match = re.search(r"time: (\S+) \(Frame: (\d+)\)", line)
+            match = re.search(r"video time: (\S+) \(Frame: (\d+)\)", line)
             if match:
                 time_str, frame_num_str = match.groups()
                 if int(frame_num_str) == trigger_frame_num:
@@ -80,8 +84,19 @@ def main():
     collage_files = sorted(list(COLLAGE_DIR.glob("collage_triggered_at_frame_*.png")))
     print(f"Found {len(collage_files)} collage files.")
 
+    # Load ground truth anomalies
+    known_anomalies = set()
+    if ANOMALIES_FILE.exists():
+        with open(ANOMALIES_FILE, 'r') as f:
+            for line in f:
+                parts = line.strip().split(',')
+                if len(parts) == 2:
+                    known_anomalies.add((parts[0], int(parts[1])))
+    print(f"Loaded {len(known_anomalies)} known anomalies for evaluation.")
+
     all_frames_features = []
     all_frames_metadata = []
+    y_true = []
 
     print("Step 1: Extracting features from all frames...")
     for collage_path in tqdm(collage_files):
@@ -98,8 +113,10 @@ def main():
         timestamp = get_timestamp_for_frame(trigger_frame)
 
         for i, frame in enumerate(frames):
+            # Resize frame to a fixed size to ensure consistent feature vector length
+            resized_frame = cv2.resize(frame, FRAME_RESIZE_DIM)
             # Use the original BGR frame, not resized or grayscale
-            feature_vector = frame.flatten().astype(np.float32) / 255.0
+            feature_vector = resized_frame.flatten().astype(np.float32) / 255.0
             
             all_frames_features.append(feature_vector)
             all_frames_metadata.append({
@@ -108,11 +125,15 @@ def main():
                 'frame_index': i,
                 'timestamp': timestamp
             })
+            
+            is_anomaly = 1 if (collage_path.name, i) in known_anomalies else 0
+            y_true.append(is_anomaly)
     
     if not all_frames_features:
         print("No features were extracted. Exiting.")
         return
 
+    y_true = np.array(y_true)
     features_array = np.array(all_frames_features)
     print(f"\nStep 2: Running KMeans with {N_CLUSTERS} clusters on {len(features_array)} frames...")
     
@@ -129,9 +150,22 @@ def main():
     distance_threshold = np.percentile(distances, ANOMALY_PERCENTILE_THRESHOLD)
     print(f"Anomaly distance threshold ({ANOMALY_PERCENTILE_THRESHOLD}th percentile): {distance_threshold:.4f}")
 
+    # Create prediction array
+    y_pred = (distances > distance_threshold).astype(int)
+
     # Filter for anomalies
-    anomaly_indices = np.where(distances > distance_threshold)[0]
+    anomaly_indices = np.where(y_pred == 1)[0]
     print(f"Found {len(anomaly_indices)} potential anomalies.")
+
+    # --- Evaluation ---
+    precision, recall, f1, _ = precision_recall_fscore_support(
+        y_true, y_pred, average='binary', zero_division=0
+    )
+    print("\n--- Evaluation Metrics ---")
+    print(f"Precision: {precision:.4f}")
+    print(f"Recall: {recall:.4f}")
+    print(f"F1-Score: {f1:.4f}")
+    print("------------------------\n")
 
     anomalous_frames_for_collage = []
     markdown_report_lines = [
@@ -140,6 +174,12 @@ def main():
         f"Anomaly Threshold: {ANOMALY_PERCENTILE_THRESHOLD}th percentile",
         f"Found {len(anomaly_indices)} potential anomalies.",
         "",
+        "## Evaluation Metrics",
+        f"- **Precision:** {precision:.4f}",
+        f"- **Recall:** {recall:.4f}",
+        f"- **F1-Score:** {f1:.4f}",
+        "",
+        "## Detected Anomalies",
         "| Source Collage | Frame Index | Timestamp | Score |",
         "|---|---|---|---|"
     ]
