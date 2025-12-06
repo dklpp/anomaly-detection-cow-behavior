@@ -112,14 +112,20 @@ if __name__ == "__main__":
     plt.grid(True, alpha=0.3)
     plt.show()
 
-    # 5. Accuracy Statistics
+        # 5. Accuracy Statistics
     tp = sum(i > threshold for i in ill_scores)     # Ill correctly flagged as Ill
     fn = sum(i <= threshold for i in ill_scores)    # Ill mistakenly flagged as Normal
     fp = sum(i > threshold for i in normal_scores)  # Normal mistakenly flagged as Ill
     tn = sum(i <= threshold for i in normal_scores) # Normal correctly flagged as Normal
-    
+
     accuracy = (tp + tn) / (len(ill_scores) + len(normal_scores))
-    
+
+    # ---- F1 METRICS ----
+    precision = tp / (tp + fp) if (tp + fp) > 0 else 0
+    recall    = tp / (tp + fn) if (tp + fn) > 0 else 0
+    f1_score  = (2 * precision * recall / (precision + recall)
+                 if (precision + recall) > 0 else 0)
+
     print("\n" + "="*30)
     print("       FINAL RESULTS       ")
     print("="*30)
@@ -131,4 +137,13 @@ if __name__ == "__main__":
     print("-" * 30)
     print(f"True Negatives (Normal clear):   {tn} / {len(normal_scores)}")
     print(f"False Positives (False alarms):  {fp} / {len(normal_scores)}")
+    print("="*30)
+
+    # Print F1 block
+    print("\n" + "="*30)
+    print("  PRECISION / RECALL / F1  ")
+    print("="*30)
+    print(f"Precision: {precision:.4f}")
+    print(f"Recall:    {recall:.4f}")
+    print(f"F1 Score:  {f1_score:.4f}")
     print("="*30)
